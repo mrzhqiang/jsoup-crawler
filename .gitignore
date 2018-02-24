@@ -1,0 +1,7 @@
+target/
+classes/
+*.class
+out/
+.idea/
+*.iml
+贴子.txt
