@@ -9,6 +9,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.List;
+import java.util.Scanner;
 import java.util.concurrent.TimeUnit;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -25,36 +26,50 @@ public class HtmlCrawler {
 
   public static void main(String[] args) throws IOException {
     if (file.exists()) {
-      System.out.println("File:" + file + " delete is " + file.delete());
-      System.out.println("File:" + file + " created is " + file.createNewFile());
+      System.out.println("文件:" + file + " 已存在，删除状态：" + file.delete());
+      System.out.println("文件:" + file + " 重新生成状态：" + file.createNewFile());
     }
-    BufferedWriter bw = new BufferedWriter(
-        new OutputStreamWriter(new FileOutputStream(file), Charset.forName("UTF-8")));
-    try {
-      // 首先找到当前页面的第一个贴子
-      Element element = parseLink("http://club.huawei.com/thread-15137624-1-1.html");
-      // 如果有贴子存在，那么页面有效
-      while (element.childNodeSize() > 0) {
-        // 记录所有贴子
-        writeAllPostByDocument(bw, element);
-        // 找到下一页的链接
-        String link =
-            document.body().select("div[class=pg]").select("a[class=nxt]").attr("abs:href");
-        // 下一页不存在，就结束循环
-        if (link.equals("")) {
-          break;
+
+    Scanner scanner = new Scanner(System.in);
+    System.out.println("请输入贴子的网址链接（输入 exit 退出）：");
+    String line = scanner.nextLine();
+
+    while (!line.equalsIgnoreCase("exit")) {
+      try (BufferedWriter bw = new BufferedWriter(
+          new OutputStreamWriter(new FileOutputStream(file), Charset.forName("UTF-8")))) {
+        // 首先找到当前页面的第一个贴子
+        Element element = parseLink(line);
+        System.out.println("连接成功，正在分析首页数据...");
+        String pageCount = document.body().select("div[class=pg]").select("a[class=last]").text();
+        System.out.println("发现共有：" + pageCount + " 个页面。");
+        // 如果有贴子存在，那么页面有效
+        while (element.childNodeSize() > 0) {
+          // 记录所有贴子
+          writeAllPostByDocument(bw, element);
+          System.out.println("已完成第 " + postCount + " 页数据的分析...");
+          // 找到下一页的链接
+          String link =
+              document.body().select("div[class=pg]").select("a[class=nxt]").attr("abs:href");
+          // 下一页不存在，就结束循环
+          if (link.equals("")) {
+            System.out.println("下一页不存在，判定任务完成。");
+            break;
+          }
+          System.out.println("找到下一页：" + link);
+          // 访问链接，得到第一个贴子内容
+          element = parseLink(link);
         }
-        // 访问链接，得到第一个贴子内容
-        element = parseLink(link);
+        bw.flush();
+      } catch (MalformedURLException e) {
+        System.err.println("错误的网址：" + e.getMessage());
+      } catch (IOException e) {
+        System.err.println("访问失败：" + e.getMessage());
       }
-      bw.flush();
-    } catch (MalformedURLException e) {
-      System.err.println("错误的网址：" + e.getMessage() + ",请重新输入");
-    } catch (IOException e) {
-      System.err.println("访问失败：" + e.getMessage() + ",请重新尝试");
-    } finally {
-      bw.close();
+      System.out.println();
+      System.out.println("请输入贴子的网址链接（输入 exit 退出）：");
+      line = scanner.nextLine();
     }
+    System.out.println("程序结束！");
   }
 
   private static Element parseLink(String link) throws IOException {
@@ -74,13 +89,18 @@ public class HtmlCrawler {
     if (postCount == 0 && isSkipFirstPost) {
       element = element.nextElementSibling();
     }
-    // 最后一个贴子不属于发布内容
+    // 最后一个【post】不属于发布内容
     while (element.childNodeSize() != 1) {
       // 楼层
       bw.append(element.select("strong").select("a").first().text());
       bw.append("\t");
+
+      Elements authi = element.select("div[class=authi]");
       // 作者
-      bw.append(element.select("div[class=authi]").select("a[class=xi2]").text());
+      bw.append(authi.select("a[class=xi2]").text());
+      bw.append("\t");
+      // 时间
+      bw.append(authi.select("em[id^=authorposton]").text());
       bw.append("\t");
       // 内容
       Elements elements = element.select("td[class=t_f]");
